@@ -4065,5 +4065,12 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSidePanel();});
 // 앱 초기 상태: 로그인 화면 표시, app 숨김
 document.querySelector('.app').style.display = 'none';
 </script>
-</body>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const selectors = ['.user-name', '.name', '#userName', '.profile-name'];
+  selectors.forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => el.remove());
+  });
+});
+</script></body>
 </html>
