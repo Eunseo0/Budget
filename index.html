@@ -430,6 +430,7 @@ nav{display:flex;border-bottom:1px solid var(--border);padding:0 24px;background
     <input type="file" id="import-file" accept=".xlsx" style="display:none" onchange="handleImportFile(this)">
     <button onclick="syncToFirebase()" title="클라우드에 저장" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">☁️</button>
     <button onclick="syncFromFirebase()" title="클라우드에서 불러오기" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">🔄</button>
+    <button onclick="migrateOldData()" title="기존 데이터 가져오기" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .15s" onmouseover="this.style.borderColor='var(--orange)'" onmouseout="this.style.borderColor='var(--border)'">📦</button>
   </div>
 </header>
 <nav>
@@ -1221,6 +1222,43 @@ async function syncFromFirebase(){
   } catch(e){
     console.error('Firebase load error:',e);
     setSyncStatus('error','❌ 불러오기 실패 (인터넷 확인)');
+    setTimeout(()=>setSyncStatus('idle'),3000);
+  }
+}
+
+// 기존 공용 DB → 내 계정으로 수동 마이그레이션
+async function migrateOldData(){
+  if(!currentUser){ alert('먼저 로그인해주세요.'); return; }
+  if(!confirm('기존 공유 DB의 데이터를 내 계정으로 가져올게요.\n현재 내 데이터에 덮어씌워집니다. 계속할까요?')) return;
+  setSyncStatus('loading','⏳ 마이그레이션 중...');
+  try{
+    const oldRef = db.collection('ledger').doc('data');
+    const oldDoc = await oldRef.get();
+    if(!oldDoc.exists){
+      setSyncStatus('error','❌ 기존 데이터 없음');
+      setTimeout(()=>setSyncStatus('idle'),3000);
+      return;
+    }
+    const data = oldDoc.data();
+    transactions = JSON.parse(data.transactions||'[]');
+    assets = JSON.parse(data.assets||'{}');
+    categories = JSON.parse(data.categories||JSON.stringify(DEFAULT_CATS));
+    budgets = JSON.parse(data.budgets||'{}');
+    // 내 계정 doc에 저장
+    await getUserDocRef(currentUser.uid).set({
+      transactions: JSON.stringify(transactions),
+      assets: JSON.stringify(assets),
+      categories: JSON.stringify(categories),
+      budgets: JSON.stringify(budgets),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    save();
+    renderAll(); renderCategoryTab();
+    setSyncStatus('saved','✅ 마이그레이션 완료!');
+    setTimeout(()=>setSyncStatus('idle'),3000);
+  } catch(e){
+    console.error('마이그레이션 오류:',e);
+    setSyncStatus('error','❌ 마이그레이션 실패');
     setTimeout(()=>setSyncStatus('idle'),3000);
   }
 }
