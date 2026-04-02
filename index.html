@@ -127,6 +127,13 @@
 <div class="summary-card"><div class="summary-label">총 지출</div><div class="summary-value red" id="st-expense">0원</div></div>
 <div class="summary-card"><div class="summary-label">순이익</div><div class="summary-value accent" id="st-net">0원</div></div>
 </div>
+<!-- 지출/수입 토글 -->
+<div class="stat-period-toggle" style="margin-bottom:14px">
+<button class="stat-period-btn active" id="stat-type-expense-btn" onclick="setStatType('expense')">💸 지출</button>
+<button class="stat-period-btn" id="stat-type-income-btn" onclick="setStatType('income')">💵 수입</button>
+</div>
+<!-- 지출 섹션 -->
+<div id="stat-expense-section">
 <div class="dash-grid" style="margin-bottom:14px">
 <div class="dash-card">
 <div class="dash-card-title">🍩 카테고리별 지출 <span style="font-size:10px;color:var(--text-dim);font-weight:400">클릭 시 상세</span></div>
@@ -149,6 +156,30 @@
 </div>
 <!-- 예산 대비 섹션 -->
 <div id="stat-budget-section" style="margin-top:14px"></div>
+</div>
+<!-- 수입 섹션 -->
+<div id="stat-income-section" style="display:none">
+<div class="dash-grid" style="margin-bottom:14px">
+<div class="dash-card">
+<div class="dash-card-title">🍩 카테고리별 수입 <span style="font-size:10px;color:var(--text-dim);font-weight:400">클릭 시 상세</span></div>
+<div class="pie-wrap" id="stat-income-cat-pie"></div>
+</div>
+<div class="dash-card">
+<div class="dash-card-title">💳 자산별 수입 <span style="font-size:10px;color:var(--text-dim);font-weight:400">클릭 시 상세</span></div>
+<div class="pie-wrap" id="stat-income-asset-pie"></div>
+</div>
+</div>
+<div class="dash-grid">
+<div class="dash-card">
+<div class="dash-card-title">📊 카테고리별 수입 상세 <span style="font-size:10px;color:var(--text-dim);font-weight:400">클릭 시 내역 보기 →</span></div>
+<div id="stat-income-cat-bars"><div class="no-data">수입 내역이 없어요</div></div>
+</div>
+<div class="dash-card">
+<div class="dash-card-title">💰 자산별 수입 상세 <span style="font-size:10px;color:var(--text-dim);font-weight:400">클릭 시 내역 보기 →</span></div>
+<div id="stat-income-asset-bars"><div class="no-data">자산 연동 수입이 없어요</div></div>
+</div>
+</div>
+</div>
 </div>
 <!-- ===== 달력 ===== -->
 <div class="tab-content" id="tab-calendar">
