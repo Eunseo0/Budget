@@ -290,6 +290,7 @@ let currentMonth=new Date();
 let statMonth=new Date();
 let budgetMonth=new Date();
 let statPeriod='month';
+let statType='expense'; // 'expense' | 'income'
 let settlingId=null;
 let currentType='expense';
 let editingAssetKey=null;
@@ -1502,6 +1503,13 @@ function setStatPeriod(p){
   ['month','year'].forEach(x=>document.getElementById('stat-'+x+'-btn').classList.toggle('active',x===p));
   renderStats();
 }
+function setStatType(t){
+  statType=t;
+  ['expense','income'].forEach(x=>document.getElementById('stat-type-'+x+'-btn').classList.toggle('active',x===t));
+  document.getElementById('stat-expense-section').style.display=t==='expense'?'':'none';
+  document.getElementById('stat-income-section').style.display=t==='income'?'':'none';
+  renderStats();
+}
 function changeStatPeriod(d){
   if(statPeriod==='year') statMonth.setFullYear(statMonth.getFullYear()+d);
   else statMonth.setMonth(statMonth.getMonth()+d);
@@ -2272,6 +2280,66 @@ function renderStats(){
 
   // ── 예산 대비 섹션 ──
   renderStatsBudget(txList);
+
+  // ── 수입 통계 ──
+  renderStatsIncome(txList);
+}
+
+function renderStatsIncome(txList){
+  // 카테고리별 수입 롤업 (isSettleReceipt 제외)
+  const incCatRollup={};
+  txList.filter(t=>t.type==='income'&&!t.isSettleReceipt).forEach(t=>{
+    const cat=getCatById(t.cat);
+    const topId=cat?.parent?cat.parent:t.cat;
+    if(!incCatRollup[topId]) incCatRollup[topId]={total:0,children:{}};
+    incCatRollup[topId].total+=t.amount;
+    if(cat?.parent){
+      incCatRollup[topId].children[t.cat]=(incCatRollup[topId].children[t.cat]||0)+t.amount;
+    }
+  });
+  const incCatTotal=Object.values(incCatRollup).reduce((s,v)=>s+v.total,0);
+  const incCatEntries=Object.entries(incCatRollup).sort((a,b)=>b[1].total-a[1].total);
+  const incCatPieData=incCatEntries.map(([id,v],i)=>({
+    key:id, label:getCatLabel(id), value:v.total, color:PIE_COLORS[i%PIE_COLORS.length]
+  }));
+  drawPie('stat-income-cat-pie', incCatPieData, incCatTotal, 'drillByIncomeCat');
+
+  const incCatBarsEl=document.getElementById('stat-income-cat-bars');
+  incCatBarsEl.innerHTML=incCatEntries.length?incCatEntries.map(([id,v],i)=>`
+    <div class="stat-bar-row" onclick="drillByIncomeCat('${id}')">
+      <div class="stat-bar-label" style="display:flex;align-items:center;gap:6px">
+        <span style="width:8px;height:8px;border-radius:50%;background:${PIE_COLORS[i%PIE_COLORS.length]};display:inline-block;flex-shrink:0"></span>
+        ${getCatEmoji(id)} ${getCatLabel(id)}
+      </div>
+      <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(v.total/incCatEntries[0][1].total*100).toFixed(0)}%;background:${PIE_COLORS[i%PIE_COLORS.length]}"></div></div>
+      <div class="stat-bar-value" style="color:var(--green)">${fmt(v.total)}</div>
+    </div>`).join(''):'<div class="no-data">수입 내역이 없어요</div>';
+
+  // 자산별 수입 집계
+  const incAssetMap={};
+  txList.filter(t=>t.type==='income'&&!t.isSettleReceipt&&t.assetId).forEach(t=>{
+    incAssetMap[t.assetId]=(incAssetMap[t.assetId]||0)+t.amount;
+  });
+  const incAssetTotal=Object.values(incAssetMap).reduce((s,v)=>s+v,0);
+  const incAssetEntries=Object.entries(incAssetMap).sort((a,b)=>b[1]-a[1]);
+  const assetAll=getAllAssets();
+  const incAssetPieData=incAssetEntries.map(([id,value],i)=>{
+    const found=assetAll.find(a=>String(a.id)===String(id));
+    return{key:id,label:found?found.name:id,value,color:PIE_COLORS[(i+3)%PIE_COLORS.length]};
+  });
+  drawPie('stat-income-asset-pie', incAssetPieData, incAssetTotal, 'drillByIncomeAsset');
+
+  const incAssetBarsEl=document.getElementById('stat-income-asset-bars');
+  incAssetBarsEl.innerHTML=incAssetEntries.length?incAssetEntries.map(([id,amt],i)=>{
+    const found=assetAll.find(a=>String(a.id)===String(id));
+    const name=found?found.name:id;
+    return `<div class="stat-bar-row" onclick="drillByIncomeAsset('${id}','${name}')">
+      <div class="stat-bar-label" style="display:flex;align-items:center;gap:6px">
+        <span style="width:8px;height:8px;border-radius:50%;background:${PIE_COLORS[(i+3)%PIE_COLORS.length]};display:inline-block;flex-shrink:0"></span>${name}
+      </div>
+      <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(amt/incAssetEntries[0][1]*100).toFixed(0)}%;background:${PIE_COLORS[(i+3)%PIE_COLORS.length]}"></div></div>
+      <div class="stat-bar-value" style="color:var(--green)">${fmt(amt)}</div>
+    </div>`}).join(''):'<div class="no-data">자산 연동 수입이 없어요</div>';
 }
 
 function renderStatsBudget(txList){
@@ -2572,6 +2640,63 @@ function drillByAsset(assetId, assetName){
   document.getElementById('sp-sub').textContent=statPeriod==='year'?fmtY(statMonth)+'년':fmtM(statMonth);
   document.getElementById('sp-summary').innerHTML=`
     <div class="side-panel-stat"><div class="side-panel-stat-val" style="color:var(--red)">${fmt(total)}</div><div class="side-panel-stat-lbl">총 지출</div></div>
+    <div class="side-panel-stat"><div class="side-panel-stat-val">${txList.length}</div><div class="side-panel-stat-lbl">건수</div></div>
+    <div class="side-panel-stat"><div class="side-panel-stat-val">${txList.length?fmt(Math.round(total/txList.length)):'-'}</div><div class="side-panel-stat-lbl">평균</div></div>`;
+  document.getElementById('sp-subcats').style.display='none';
+  renderSidePanelTxList(txList);
+  openSidePanel();
+}
+
+function drillByIncomeCat(topCatId){
+  const txList=getPeriodTx(statMonth,statPeriod);
+  const topCat=getCatById(topCatId);
+  const emoji=getCatEmoji(topCatId);
+  const name=topCat?topCat.name:topCatId;
+  const childIds=new Set(categories.filter(c=>c.parent===topCatId).map(c=>c.id));
+  childIds.add(topCatId);
+  const allTx=txList.filter(t=>t.type==='income'&&!t.isSettleReceipt&&childIds.has(t.cat));
+  const total=allTx.reduce((s,t)=>s+t.amount,0);
+  const subMap={};
+  allTx.forEach(t=>{subMap[t.cat]=(subMap[t.cat]||0)+t.amount;});
+  const subEntries=Object.entries(subMap).sort((a,b)=>b[1]-a[1]);
+  const hasChildren=subEntries.length>1||(subEntries.length===1&&subEntries[0][0]!==topCatId);
+  document.getElementById('sp-icon').textContent=emoji;
+  document.getElementById('sp-title').textContent=name+' 수입 상세';
+  document.getElementById('sp-sub').textContent=statPeriod==='year'?fmtY(statMonth)+'년':fmtM(statMonth);
+  document.getElementById('sp-summary').innerHTML=`
+    <div class="side-panel-stat"><div class="side-panel-stat-val" style="color:var(--green)">${fmt(total)}</div><div class="side-panel-stat-lbl">총 수입</div></div>
+    <div class="side-panel-stat"><div class="side-panel-stat-val">${allTx.length}</div><div class="side-panel-stat-lbl">건수</div></div>
+    <div class="side-panel-stat"><div class="side-panel-stat-val">${allTx.length?fmt(Math.round(total/allTx.length)):'-'}</div><div class="side-panel-stat-lbl">평균</div></div>`;
+  const subcatsEl=document.getElementById('sp-subcats');
+  if(hasChildren){
+    subcatsEl.style.display='flex';
+    subcatsEl.innerHTML=`<button class="subcat-chip active" onclick="filterIncomeSubcat(null,this,'${topCatId}')">전체</button>`
+      +subEntries.map(([id])=>`<button class="subcat-chip" onclick="filterIncomeSubcat('${id}',this,'${topCatId}')">${getCatEmoji(id)} ${getCatById(id)?.name||id}</button>`).join('');
+  } else {
+    subcatsEl.style.display='none';
+  }
+  renderSidePanelTxList(allTx);
+  openSidePanel();
+}
+
+function filterIncomeSubcat(subCatId, el, topCatId){
+  document.querySelectorAll('#sp-subcats .subcat-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const txList=getPeriodTx(statMonth,statPeriod);
+  const childIds=new Set(categories.filter(c=>c.parent===topCatId).map(c=>c.id));
+  childIds.add(topCatId);
+  const filtered=txList.filter(t=>t.type==='income'&&!t.isSettleReceipt&&(subCatId?t.cat===subCatId:childIds.has(t.cat)));
+  renderSidePanelTxList(filtered);
+}
+
+function drillByIncomeAsset(assetId, assetName){
+  const txList=getPeriodTx(statMonth,statPeriod).filter(t=>t.type==='income'&&!t.isSettleReceipt&&String(t.assetId)===String(assetId));
+  const total=txList.reduce((s,t)=>s+t.amount,0);
+  document.getElementById('sp-icon').textContent='💳';
+  document.getElementById('sp-title').textContent=assetName+' 수입 내역';
+  document.getElementById('sp-sub').textContent=statPeriod==='year'?fmtY(statMonth)+'년':fmtM(statMonth);
+  document.getElementById('sp-summary').innerHTML=`
+    <div class="side-panel-stat"><div class="side-panel-stat-val" style="color:var(--green)">${fmt(total)}</div><div class="side-panel-stat-lbl">총 수입</div></div>
     <div class="side-panel-stat"><div class="side-panel-stat-val">${txList.length}</div><div class="side-panel-stat-lbl">건수</div></div>
     <div class="side-panel-stat"><div class="side-panel-stat-val">${txList.length?fmt(Math.round(total/txList.length)):'-'}</div><div class="side-panel-stat-lbl">평균</div></div>`;
   document.getElementById('sp-subcats').style.display='none';
