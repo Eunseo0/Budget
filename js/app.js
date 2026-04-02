@@ -289,30 +289,55 @@ let budgets={};
 const HOLIDAY_API_KEY = 'fac5e4f8d811c41c510ecd798106960f92783c8ebe86c91e619e9b11016a7a31';
 const holidayCache = {}; // { 'YYYY': Set(['YYYY-MM-DD', ...]) }
 
+function fetchHolidaysJsonp(year, month) {
+  return new Promise((resolve) => {
+    const cbName = `_hcb_${year}_${month}_${Date.now()}`;
+    const url = `https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo`
+      + `?serviceKey=${HOLIDAY_API_KEY}&solYear=${year}&solMonth=${month}&numOfRows=20&callback=${cbName}`;
+    const script = document.createElement('script');
+    script.src = url;
+    const timer = setTimeout(() => {
+      delete window[cbName];
+      document.body.removeChild(script);
+      resolve([]);
+    }, 5000);
+    window[cbName] = (data) => {
+      clearTimeout(timer);
+      delete window[cbName];
+      document.body.removeChild(script);
+      try {
+        const items = data?.response?.body?.items?.item;
+        if (!items) return resolve([]);
+        resolve(Array.isArray(items) ? items : [items]);
+      } catch(e) { resolve([]); }
+    };
+    document.body.appendChild(script);
+  });
+}
+
 async function fetchHolidays(year) {
   if (holidayCache[year]) return holidayCache[year];
+  // 로딩 중 표시용으로 빈 Set 먼저 세팅 (중복 호출 방지)
+  holidayCache[year] = new Set();
   const set = new Set();
   try {
-    // 월별로 요청 (API가 월 단위)
     const months = Array.from({length:12},(_,i)=>String(i+1).padStart(2,'0'));
-    await Promise.all(months.map(async mm => {
-      const url = `https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo`
-        + `?serviceKey=${encodeURIComponent(HOLIDAY_API_KEY)}&solYear=${year}&solMonth=${mm}&_type=json&numOfRows=20`;
-      const res = await fetch(url);
-      const json = await res.json();
-      const items = json?.response?.body?.items?.item;
-      if (!items) return;
-      const arr = Array.isArray(items) ? items : [items];
-      arr.forEach(it => {
+    // JSONP는 병렬 요청 시 콜백 충돌 가능성 있어 순차 처리
+    for (const mm of months) {
+      const items = await fetchHolidaysJsonp(year, mm);
+      items.forEach(it => {
         const s = String(it.locdate);
         const ds = `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
         set.add(ds);
       });
-    }));
+    }
   } catch(e) {
     console.warn('공휴일 API 오류:', e);
   }
   holidayCache[year] = set;
+  // 달력/거래내역 다시 그리기
+  renderCalendar();
+  renderLedger();
   return set;
 }
 
