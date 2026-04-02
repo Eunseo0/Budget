@@ -285,6 +285,46 @@ let assets={};
 let categories=JSON.parse(localStorage.getItem('cats-v1')||JSON.stringify(DEFAULT_CATS));
 let budgets={};
 
+// ==================== 공휴일 ====================
+const HOLIDAY_API_KEY = 'fac5e4f8d811c41c510ecd798106960f92783c8ebe86c91e619e9b11016a7a31';
+const holidayCache = {}; // { 'YYYY': Set(['YYYY-MM-DD', ...]) }
+
+async function fetchHolidays(year) {
+  if (holidayCache[year]) return holidayCache[year];
+  const set = new Set();
+  try {
+    // 월별로 요청 (API가 월 단위)
+    const months = Array.from({length:12},(_,i)=>String(i+1).padStart(2,'0'));
+    await Promise.all(months.map(async mm => {
+      const url = `https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo`
+        + `?serviceKey=${encodeURIComponent(HOLIDAY_API_KEY)}&solYear=${year}&solMonth=${mm}&_type=json&numOfRows=20`;
+      const res = await fetch(url);
+      const json = await res.json();
+      const items = json?.response?.body?.items?.item;
+      if (!items) return;
+      const arr = Array.isArray(items) ? items : [items];
+      arr.forEach(it => {
+        const s = String(it.locdate);
+        const ds = `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+        set.add(ds);
+      });
+    }));
+  } catch(e) {
+    console.warn('공휴일 API 오류:', e);
+  }
+  holidayCache[year] = set;
+  return set;
+}
+
+function isHoliday(dateStr) {
+  const year = dateStr.slice(0,4);
+  return holidayCache[year]?.has(dateStr) || false;
+}
+
+async function ensureHolidays(year) {
+  if (!holidayCache[year]) await fetchHolidays(year);
+}
+
 let currentFilter='all';
 let currentMonth=new Date();
 let statMonth=new Date();
@@ -1594,7 +1634,8 @@ function miniTxCard(t){
 
 
 // ==================== RENDER LEDGER ====================
-function renderLedger(){
+async function renderLedger(){
+  await ensureHolidays(currentMonth.getFullYear());
   const pendingTx=transactions.filter(t=>t.isDutch&&!t.settled);
   const banner=document.getElementById('ledger-pending-banner');
   banner.innerHTML=pendingTx.length?`<div class="pending-banner">
@@ -1676,7 +1717,8 @@ function renderLedger(){
     const isToday=g.date===todayStr;
     const isSun=dateObj.getDay()===0;
     const isSat=dateObj.getDay()===6;
-    const dayColor=isSun?'var(--red)':isSat?'var(--accent)':'var(--text)';
+    const isHol=isHoliday(g.date);
+    const dayColor=(isSun||isHol)?'var(--red)':isSat?'var(--accent)':'var(--text)';
     const dayExp=g.items.filter(t=>t.type==='expense').reduce((s,t)=>s+(t.isDutch?t.myShare:t.amount),0);
     const dayInc=g.items.filter(t=>t.type==='income'&&!t.isSettleReceipt).reduce((s,t)=>s+t.amount,0);
 
@@ -1831,9 +1873,9 @@ function closeDetailView(){
 // ==================== CALENDAR ====================
 let calMonth=new Date();
 
-function changeCalMonth(d){
+async function changeCalMonth(d){
   calMonth.setMonth(calMonth.getMonth()+d);
-  renderCalendar();
+  await renderCalendar();
 }
 
 // 결제 주기 범위 계산: billingDay 기준 전달~이번달
@@ -1854,9 +1896,10 @@ function dateStr(d){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-function renderCalendar(){
+async function renderCalendar(){
   const y=calMonth.getFullYear(), m=calMonth.getMonth();
   document.getElementById('cal-month-label').textContent=fmtM(calMonth);
+  await ensureHolidays(y);
 
   // 이 달 거래 집계 (날짜별)
   const dayMap={}; // 'YYYY-MM-DD': {expense, income}
@@ -1908,10 +1951,11 @@ function renderCalendar(){
 
 function calCellHtml(day,ds,dayMap,otherMonth,isToday,isSun,isSat){
   const info=dayMap[ds]||{expense:0,income:0};
+  const isHol=!otherMonth&&isHoliday(ds);
   const cls=['cal-cell',
     otherMonth?'other-month':'',
     isToday?'today':'',
-    isSun?'sunday':'',
+    isSun||isHol?'sunday':'',
     isSat?'saturday':''
   ].filter(Boolean).join(' ');
   const expHtml=info.expense?`<div class="cal-amt expense">-${fmt(info.expense)}</div>`:'';
@@ -3232,6 +3276,9 @@ calMonth=new Date();
 setType('expense');
 document.getElementById('fab-add').classList.add('hidden');
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSidePanel();});
+
+// 현재 연도 공휴일 미리 캐싱
+fetchHolidays(new Date().getFullYear());
 
 // 인증 상태 감지로 앱 진입 (auth.onAuthStateChanged에서 처리)
 // 앱 초기 상태: 로그인 화면 표시, app 숨김
