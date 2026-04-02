@@ -1444,7 +1444,7 @@ function getYearTx(d){return transactions.filter(t=>t.date.startsWith(String(d.g
 function getPeriodTx(d,p){return p==='year'?getYearTx(d):getMonthTx(d);}
 function calcSummary(txList){
   let income=0,expense=0,pending=0;
-  txList.forEach(t=>{if(t.type==='income')income+=t.amount;if(t.type==='expense')expense+=t.isDutch?t.myShare:t.amount;});
+  txList.forEach(t=>{if(t.type==='income'&&!t.isSettleReceipt)income+=t.amount;if(t.type==='expense')expense+=t.isDutch?t.myShare:t.amount;});
   transactions.filter(t=>t.isDutch&&!t.settled).forEach(t=>pending+=t.otherShare);
   return{income,expense,pending};
 }
@@ -1623,7 +1623,7 @@ function renderLedger(){
     const isSat=dateObj.getDay()===6;
     const dayColor=isSun?'var(--red)':isSat?'var(--accent)':'var(--text)';
     const dayExp=g.items.filter(t=>t.type==='expense').reduce((s,t)=>s+(t.isDutch?t.myShare:t.amount),0);
-    const dayInc=g.items.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+    const dayInc=g.items.filter(t=>t.type==='income'&&!t.isSettleReceipt).reduce((s,t)=>s+t.amount,0);
 
     const sepHtml=`<div class="date-separator">
       <div class="date-sep-day" style="color:${dayColor}">${parseInt(d)}${isToday?'<span style="font-size:10px;background:var(--accent);color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle">오늘</span>':''}</div>
@@ -1809,7 +1809,7 @@ function renderCalendar(){
   transactions.filter(t=>t.date.startsWith(ym)&&t.type!=='transfer'&&t.type!=='credit_pay'&&t.type!=='balance_adj').forEach(t=>{
     if(!dayMap[t.date]) dayMap[t.date]={expense:0,income:0};
     if(t.type==='expense') dayMap[t.date].expense+=t.isDutch?t.myShare:t.amount;
-    if(t.type==='income') dayMap[t.date].income+=t.amount;
+    if(t.type==='income'&&!t.isSettleReceipt) dayMap[t.date].income+=t.amount;
   });
 
   // 월 요약
@@ -1870,7 +1870,7 @@ function calCellHtml(day,ds,dayMap,otherMonth,isToday,isSun,isSat){
 function showCalDay(dateStr){
   const dayTx=transactions.filter(t=>t.date===dateStr&&t.type!=='transfer'&&t.type!=='credit_pay'&&t.type!=='balance_adj');
   const total=dayTx.filter(t=>t.type==='expense').reduce((s,t)=>s+(t.isDutch?t.myShare:t.amount),0);
-  const income=dayTx.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const income=dayTx.filter(t=>t.type==='income'&&!t.isSettleReceipt).reduce((s,t)=>s+t.amount,0);
   sidePanelCtx={type:'day',dateStr};
   document.getElementById('sp-icon').textContent='📅';
   document.getElementById('sp-title').textContent=dateStr;
@@ -2303,7 +2303,7 @@ function renderMiniBarChart(cid, count, period){
   const data=months.map(d=>{
     const txList=getMonthTx(d);
     let income=0,expense=0;
-    txList.forEach(t=>{if(t.type==='income')income+=t.amount;if(t.type==='expense')expense+=t.isDutch?t.myShare:t.amount;});
+    txList.forEach(t=>{if(t.type==='income'&&!t.isSettleReceipt)income+=t.amount;if(t.type==='expense')expense+=t.isDutch?t.myShare:t.amount;});
     return{label:String(d.getMonth()+1)+'월',income,expense};
   });
   const maxVal=Math.max(...data.map(d=>Math.max(d.income,d.expense)),1);
@@ -2558,7 +2558,7 @@ function _renderAssetDrill(assetId, assetName){
   const ym=`${assetDrillMonth.getFullYear()}-${String(assetDrillMonth.getMonth()+1).padStart(2,'0')}`;
   const monthTx=allTx.filter(t=>t.date.startsWith(ym));
   const monthExp=monthTx.filter(t=>t.type==='expense'&&String(t.assetId)===String(assetId)).reduce((s,t)=>s+t.amount,0);
-  const monthInc=monthTx.filter(t=>t.type==='income'&&String(t.assetId)===String(assetId)).reduce((s,t)=>s+t.amount,0);
+  const monthInc=monthTx.filter(t=>t.type==='income'&&!t.isSettleReceipt&&String(t.assetId)===String(assetId)).reduce((s,t)=>s+t.amount,0);
 
   sidePanelCtx={type:'asset',assetId,assetName};
   document.getElementById('sp-icon').textContent='🏦';
@@ -2849,7 +2849,7 @@ function exportExcel(){
   transactions.filter(t=>t.type==='expense'||t.type==='income').forEach(t=>{
     const ym=t.date.slice(0,7);
     if(!monthMap[ym]) monthMap[ym]={income:0,expense:0};
-    if(t.type==='income') monthMap[ym].income+=t.amount;
+    if(t.type==='income'&&!t.isSettleReceipt) monthMap[ym].income+=t.amount;
     if(t.type==='expense') monthMap[ym].expense+=t.isDutch?t.myShare:t.amount;
   });
   const statHeaders=['년월','수입','지출','순이익'];
