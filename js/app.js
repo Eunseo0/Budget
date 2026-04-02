@@ -1373,7 +1373,10 @@ function confirmSettle(){
   const tx=transactions.find(t=>t.id===settlingId);
   if(!tx) return;
 
-  const today=new Date().toISOString().slice(0,10);
+  const smDateEl=document.getElementById('sm-date');
+  const smTimeEl=document.getElementById('sm-time');
+  const today=smDateEl&&smDateEl.value?smDateEl.value:new Date().toISOString().slice(0,10);
+  const settleTime=smTimeEl?smTimeEl.value:'';
   const checks=document.querySelectorAll('.sm-person-check:checked');
   if(!checks.length){alert('수령한 인원을 선택해주세요.');return;}
 
@@ -1401,7 +1404,7 @@ function confirmSettle(){
     const personName=person.name||`${idx+1}번째 인원`;
     transactions.unshift({
       id:Date.now()+Math.random(),
-      date:today, time:'',
+      date:today, time:settleTime,
       name:`정산 수령 (${tx.name} · ${personName})`,
       amount,
       assetId:assetId||null,
