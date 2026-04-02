@@ -89,6 +89,34 @@ async function signOutUser(){
   await auth.signOut();
 }
 
+// ==================== GUEST MODE ====================
+let isGuestMode = false;
+
+function enterGuestMode(){
+  isGuestMode = true;
+  localStorage.setItem('guest-mode', '1');
+  document.getElementById('login-screen').classList.add('hidden');
+  document.querySelector('.app').style.display = '';
+  // localStorage에서 데이터 로드
+  transactions = JSON.parse(localStorage.getItem('ledger-v4')||'[]');
+  assets = JSON.parse(localStorage.getItem('assets-v1')||'{}');
+  categories = JSON.parse(localStorage.getItem('cats-v1')||JSON.stringify(DEFAULT_CATS));
+  budgets = JSON.parse(localStorage.getItem('budgets-v1')||'{}');
+  updateHeaderAuthUI(null);
+  setSyncStatus('offline', '📴 로컬 저장 모드');
+  setTimeout(()=>setSyncStatus('idle'), 3000);
+  renderAll();
+  renderCategoryTab();
+}
+
+function exitGuestMode(){
+  if(!confirm('로그인 화면으로 돌아갈까요?\n로컬에 저장된 데이터는 유지됩니다.')) return;
+  isGuestMode = false;
+  localStorage.removeItem('guest-mode');
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.querySelector('.app').style.display = 'none';
+}
+
 function updateHeaderAuthUI(user){
   const authBtn=document.getElementById('auth-btn');
   const avatarWrap=document.getElementById('user-avatar-wrap');
@@ -100,7 +128,12 @@ function updateHeaderAuthUI(user){
     avatar.src=user.photoURL||'';
     avatar.alt=(user.displayName||user.email||'사용자')+' 프로필 이미지';
     nameEl.textContent=user.displayName||user.email||'';
-  }else{
+  } else if(isGuestMode){
+    authBtn.textContent='로그인';
+    avatarWrap.classList.remove('show');
+    avatar.src='';
+    nameEl.textContent='👤 비로그인';
+  } else {
     authBtn.textContent='로그인';
     avatarWrap.classList.remove('show');
     avatar.src='';
@@ -110,6 +143,7 @@ function updateHeaderAuthUI(user){
 
 function handleHeaderAuthAction(){
   if(currentUser) signOutUser();
+  else if(isGuestMode) exitGuestMode();
   else signInWithGoogle();
 }
 
@@ -148,9 +182,11 @@ document.addEventListener('click',e=>{
 
 // 인증 상태 감지 → 앱 진입점
 auth.onAuthStateChanged(async (user) => {
-  updateHeaderAuthUI(user);
   if(user){
+    isGuestMode = false;
+    localStorage.removeItem('guest-mode');
     currentUser = user;
+    updateHeaderAuthUI(user);
     document.getElementById('login-screen').classList.add('hidden');
     document.querySelector('.app').style.display = '';
     // 기존 데이터 마이그레이션 체크 후 로드
@@ -159,8 +195,14 @@ auth.onAuthStateChanged(async (user) => {
     renderCategoryTab();
   } else {
     currentUser = null;
-    document.getElementById('login-screen').classList.remove('hidden');
-    document.querySelector('.app').style.display = 'none';
+    // 이전에 게스트 모드로 사용 중이었으면 자동 복원
+    if(localStorage.getItem('guest-mode')==='1'){
+      enterGuestMode();
+    } else {
+      updateHeaderAuthUI(null);
+      document.getElementById('login-screen').classList.remove('hidden');
+      document.querySelector('.app').style.display = 'none';
+    }
   }
 });
 
@@ -264,6 +306,7 @@ function save(){
 
 // 수동 동기화: Firebase에 업로드 (버튼 클릭 시)
 async function syncToFirebase(){
+  if(isGuestMode){ alert('동기화는 로그인 후 이용할 수 있어요.\n로그인 없이 사용 중에는 데이터가 이 기기에만 저장됩니다.'); return; }
   if(!currentUser){ alert('로그인이 필요해요.'); return; }
   setSyncStatus('saving');
   try{
@@ -285,6 +328,7 @@ async function syncToFirebase(){
 
 // 수동 동기화: Firebase에서 다운로드 (버튼 클릭 시)
 async function syncFromFirebase(){
+  if(isGuestMode){ alert('동기화는 로그인 후 이용할 수 있어요.\n로그인 없이 사용 중에는 데이터가 이 기기에만 저장됩니다.'); return; }
   if(!currentUser){ alert('로그인이 필요해요.'); return; }
   if(!confirm('클라우드 데이터를 불러올까요?\n현재 기기의 데이터는 클라우드 데이터로 덮어씌워집니다.'))return;
   setSyncStatus('loading');
