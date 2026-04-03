@@ -1048,12 +1048,26 @@ function openTxDetailModal(id){
     // 기존에 추가된 버튼 있으면 제거
     actions.querySelectorAll('.tx-detail-btn').forEach(b=>b.remove());
     if(tx.type!=='transfer'){
-      const copyBtn=document.createElement('button');
-      copyBtn.className='btn btn-ghost tx-detail-btn';
-      copyBtn.textContent='복사';
-      copyBtn.style.cssText='margin-right:auto';
-      copyBtn.onclick=()=>{closeAddModal();copyTransaction(id);};
-      actions.prepend(copyBtn);
+      // 복사 드롭다운 래퍼
+      const copyWrap=document.createElement('div');
+      copyWrap.className='tx-detail-btn';
+      copyWrap.style.cssText='position:relative;margin-right:auto;display:flex;gap:4px';
+
+      const copyOrigBtn=document.createElement('button');
+      copyOrigBtn.className='btn btn-ghost';
+      copyOrigBtn.textContent='원본 날짜로 복사';
+      copyOrigBtn.style.cssText='font-size:12px;padding:6px 10px';
+      copyOrigBtn.onclick=()=>{closeAddModal();copyTransaction(id,true);};
+
+      const copyNowBtn=document.createElement('button');
+      copyNowBtn.className='btn btn-ghost';
+      copyNowBtn.textContent='지금 시간으로 복사';
+      copyNowBtn.style.cssText='font-size:12px;padding:6px 10px';
+      copyNowBtn.onclick=()=>{closeAddModal();copyTransaction(id,false);};
+
+      copyWrap.appendChild(copyOrigBtn);
+      copyWrap.appendChild(copyNowBtn);
+      actions.prepend(copyWrap);
     }
     const delBtn=document.createElement('button');
     delBtn.className='btn btn-danger-soft tx-detail-btn';
@@ -1409,14 +1423,22 @@ function sortTransactions(){
 }
 
 // ==================== 내역 복사 ====================
-function copyTransaction(id){
+// useOriginalDate: true=원본 날짜/시간, false=지금 날짜/시간
+function copyTransaction(id, useOriginalDate=false){
   const tx=transactions.find(t=>t.id===id);
   if(!tx) return;
   if(tx.type==='transfer'){alert('이체 내역은 복사할 수 없어요');return;}
   openAddModal(null);
   setTimeout(()=>{
     setType(tx.type);
-    document.getElementById('f-date').valueAsDate=new Date();
+    if(useOriginalDate){
+      document.getElementById('f-date').value=tx.date;
+      document.getElementById('f-time').value=tx.time||'';
+    } else {
+      const now=new Date();
+      document.getElementById('f-date').valueAsDate=now;
+      document.getElementById('f-time').value=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    }
     document.getElementById('f-name').value=tx.name;
     setFmtValue('f-amount',tx.amount);
     setTimeout(()=>{
