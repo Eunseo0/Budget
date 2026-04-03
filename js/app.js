@@ -1921,7 +1921,7 @@ async function renderLedger(){
     const dayInc=g.items.filter(t=>t.type==='income'&&!t.isSettleReceipt).reduce((s,t)=>s+t.amount,0);
 
     const sepHtml=`<div class="date-separator">
-      <div class="date-sep-day" style="color:${dayColor}">${parseInt(d)}${isToday?'<span style="font-size:10px;background:var(--accent);color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle">오늘</span>':''}</div>
+      <div class="date-sep-day" style="color:${dayColor}">${parseInt(d)}${isToday?'<span style="font-size:10px;background:var(--accent);color:#fff;border-radius:4px;padding:1px 5px;flex-shrink:0">오늘</span>':''}</div>
       <div class="date-sep-meta">
         <div class="date-sep-ym">${parseInt(m)}월 ${y}</div>
         <div class="date-sep-dow">${dow}요일</div>
