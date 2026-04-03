@@ -1048,25 +1048,50 @@ function openTxDetailModal(id){
     // 기존에 추가된 버튼 있으면 제거
     actions.querySelectorAll('.tx-detail-btn').forEach(b=>b.remove());
     if(tx.type!=='transfer'){
-      // 복사 드롭다운 래퍼
       const copyWrap=document.createElement('div');
       copyWrap.className='tx-detail-btn';
-      copyWrap.style.cssText='position:relative;margin-right:auto;display:flex;gap:4px';
+      copyWrap.style.cssText='position:relative;margin-right:auto';
 
-      const copyOrigBtn=document.createElement('button');
-      copyOrigBtn.className='btn btn-ghost';
-      copyOrigBtn.textContent='원본 날짜로 복사';
-      copyOrigBtn.style.cssText='font-size:12px;padding:6px 10px';
-      copyOrigBtn.onclick=()=>{closeAddModal();copyTransaction(id,true);};
+      const dropdown=document.createElement('div');
+      dropdown.style.cssText=`
+        display:none;position:absolute;bottom:calc(100% + 6px);left:0;
+        background:var(--surface);border:1px solid var(--border);
+        border-radius:var(--radius-sm,8px);box-shadow:0 4px 16px rgba(0,0,0,.12);
+        min-width:160px;overflow:hidden;z-index:200;
+      `;
 
-      const copyNowBtn=document.createElement('button');
-      copyNowBtn.className='btn btn-ghost';
-      copyNowBtn.textContent='지금 시간으로 복사';
-      copyNowBtn.style.cssText='font-size:12px;padding:6px 10px';
-      copyNowBtn.onclick=()=>{closeAddModal();copyTransaction(id,false);};
+      const optOrig=document.createElement('button');
+      optOrig.textContent='원본 날짜로 복사';
+      optOrig.style.cssText='width:100%;padding:10px 14px;text-align:left;font-size:13px;font-weight:500;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit;border-bottom:1px solid var(--border)';
+      optOrig.onmouseenter=()=>optOrig.style.background='var(--surface2)';
+      optOrig.onmouseleave=()=>optOrig.style.background='none';
+      optOrig.onclick=()=>{closeAddModal();copyTransaction(id,true);};
 
-      copyWrap.appendChild(copyOrigBtn);
-      copyWrap.appendChild(copyNowBtn);
+      const optNow=document.createElement('button');
+      optNow.textContent='지금 시간으로 복사';
+      optNow.style.cssText='width:100%;padding:10px 14px;text-align:left;font-size:13px;font-weight:500;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit';
+      optNow.onmouseenter=()=>optNow.style.background='var(--surface2)';
+      optNow.onmouseleave=()=>optNow.style.background='none';
+      optNow.onclick=()=>{closeAddModal();copyTransaction(id,false);};
+
+      dropdown.appendChild(optOrig);
+      dropdown.appendChild(optNow);
+
+      const copyBtn=document.createElement('button');
+      copyBtn.className='btn btn-ghost';
+      copyBtn.textContent='복사';
+      copyBtn.onclick=(e)=>{
+        e.stopPropagation();
+        const isOpen=dropdown.style.display==='block';
+        dropdown.style.display=isOpen?'none':'block';
+        if(!isOpen){
+          const close=()=>{dropdown.style.display='none';document.removeEventListener('click',close);};
+          setTimeout(()=>document.addEventListener('click',close),0);
+        }
+      };
+
+      copyWrap.appendChild(dropdown);
+      copyWrap.appendChild(copyBtn);
       actions.prepend(copyWrap);
     }
     const delBtn=document.createElement('button');
