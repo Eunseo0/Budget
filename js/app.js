@@ -92,16 +92,26 @@ async function signOutUser(){
 // ==================== GUEST MODE ====================
 let isGuestMode = false;
 
-function enterGuestMode(){
+function enterGuestMode(fresh=false){
   isGuestMode = true;
   localStorage.setItem('guest-mode', '1');
   document.getElementById('login-screen').classList.add('hidden');
   document.querySelector('.app').style.display = '';
-  // localStorage에서 데이터 로드
-  transactions = JSON.parse(localStorage.getItem('ledger-v4')||'[]');
-  assets = JSON.parse(localStorage.getItem('assets-v1')||'{}');
-  categories = JSON.parse(localStorage.getItem('cats-v1')||JSON.stringify(DEFAULT_CATS));
-  budgets = JSON.parse(localStorage.getItem('budgets-v1')||'{}');
+  if(fresh){
+    // 버튼으로 새로 진입 → 게스트 저장소 초기화 후 빈 상태 시작
+    clearGuestData();
+    localStorage.setItem('guest-mode', '1'); // clearGuestData가 지우므로 다시 세팅
+    transactions = [];
+    assets = {};
+    categories = JSON.parse(JSON.stringify(DEFAULT_CATS));
+    budgets = {};
+  } else {
+    // 새로고침 복원 → 기존 게스트 저장소 이어서 사용
+    transactions = JSON.parse(localStorage.getItem('guest-ledger-v4')||'[]');
+    assets = JSON.parse(localStorage.getItem('guest-assets-v1')||'{}');
+    categories = JSON.parse(localStorage.getItem('guest-cats-v1')||JSON.stringify(DEFAULT_CATS));
+    budgets = JSON.parse(localStorage.getItem('guest-budgets-v1')||'{}');
+  }
   updateHeaderAuthUI(null);
   setSyncStatus('offline', '📴 로컬 저장 모드');
   setTimeout(()=>setSyncStatus('idle'), 3000);
@@ -183,14 +193,22 @@ document.addEventListener('click',e=>{
 // 인증 상태 감지 → 앱 진입점
 auth.onAuthStateChanged(async (user) => {
   if(user){
+    const wasGuest = isGuestMode;
+    const guestHasData = hasGuestData();
     isGuestMode = false;
     localStorage.removeItem('guest-mode');
     currentUser = user;
     updateHeaderAuthUI(user);
     document.getElementById('login-screen').classList.add('hidden');
     document.querySelector('.app').style.display = '';
-    // 기존 데이터 마이그레이션 체크 후 로드
-    await handleInitialLoad(user.uid);
+
+    if(wasGuest && guestHasData){
+      // 게스트 데이터가 있는 상태로 로그인 → 처리 방식 선택
+      await handleGuestLoginMerge(user.uid);
+    } else {
+      clearGuestData();
+      await handleInitialLoad(user.uid);
+    }
     renderAll();
     renderCategoryTab();
   } else {
@@ -205,6 +223,72 @@ auth.onAuthStateChanged(async (user) => {
     }
   }
 });
+
+async function handleGuestLoginMerge(uid){
+  const userRef = getUserDocRef(uid);
+  setSyncStatus('loading');
+  try{
+    const doc = await userRef.get();
+    const accountExists = doc.exists;
+
+    // 게스트 데이터 임시 보관
+    const guestTx = JSON.parse(localStorage.getItem('guest-ledger-v4')||'[]');
+    const guestAssets = JSON.parse(localStorage.getItem('guest-assets-v1')||'{}');
+    const guestCats = JSON.parse(localStorage.getItem('guest-cats-v1')||JSON.stringify(DEFAULT_CATS));
+    const guestBudgets = JSON.parse(localStorage.getItem('guest-budgets-v1')||'{}');
+
+    let choice;
+    if(accountExists){
+      choice = confirm(
+        '기존 계정 데이터가 있어요.
+
+' +
+        '확인 → 기존 계정 데이터 불러오기 (게스트 데이터 삭제)
+' +
+        '취소 → 게스트 데이터를 계정에 저장 (기존 계정 데이터 덮어쓰기)'
+      );
+    } else {
+      // 신규 계정 → 게스트 데이터 자동 저장
+      choice = false;
+    }
+
+    if(choice){
+      // 기존 계정 데이터 불러오기
+      const data = doc.data();
+      transactions = JSON.parse(data.transactions||'[]');
+      assets = JSON.parse(data.assets||'{}');
+      categories = JSON.parse(data.categories||JSON.stringify(DEFAULT_CATS));
+      budgets = JSON.parse(data.budgets||'{}');
+      save();
+    } else {
+      // 게스트 데이터를 계정에 저장
+      transactions = guestTx;
+      assets = guestAssets;
+      categories = guestCats;
+      budgets = guestBudgets;
+      await userRef.set({
+        transactions: JSON.stringify(transactions),
+        assets: JSON.stringify(assets),
+        categories: JSON.stringify(categories),
+        budgets: JSON.stringify(budgets),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      save();
+      setSyncStatus('saved', '✅ 게스트 데이터 저장 완료');
+      setTimeout(()=>setSyncStatus('idle'), 2500);
+    }
+    clearGuestData();
+  } catch(e){
+    console.error('게스트 병합 오류:', e);
+    // 실패 시 게스트 데이터 유지
+    transactions = JSON.parse(localStorage.getItem('guest-ledger-v4')||'[]');
+    assets = JSON.parse(localStorage.getItem('guest-assets-v1')||'{}');
+    categories = JSON.parse(localStorage.getItem('guest-cats-v1')||JSON.stringify(DEFAULT_CATS));
+    budgets = JSON.parse(localStorage.getItem('guest-budgets-v1')||'{}');
+    setSyncStatus('offline','📴 오프라인 모드');
+    setTimeout(()=>setSyncStatus('idle'),3000);
+  }
+}
 
 // 마이그레이션 + 초기 로드
 async function handleInitialLoad(uid){
@@ -364,10 +448,26 @@ let selectedAssetTypeKey=null;
 // ==================== SAVE / LOAD ====================
 // 평소엔 localStorage에만 저장 (Firebase 횟수 절약)
 function save(){
-  localStorage.setItem('ledger-v4',JSON.stringify(transactions));
-  localStorage.setItem('assets-v1',JSON.stringify(assets));
-  localStorage.setItem('cats-v1',JSON.stringify(categories));
-  localStorage.setItem('budgets-v1',JSON.stringify(budgets));
+  // 게스트 모드일 땐 별도 키에 저장 (계정 데이터와 분리)
+  const prefix = isGuestMode ? 'guest-' : '';
+  localStorage.setItem(prefix+'ledger-v4',JSON.stringify(transactions));
+  localStorage.setItem(prefix+'assets-v1',JSON.stringify(assets));
+  localStorage.setItem(prefix+'cats-v1',JSON.stringify(categories));
+  localStorage.setItem(prefix+'budgets-v1',JSON.stringify(budgets));
+}
+
+function hasGuestData(){
+  const tx = JSON.parse(localStorage.getItem('guest-ledger-v4')||'[]');
+  const ast = JSON.parse(localStorage.getItem('guest-assets-v1')||'{}');
+  return tx.length > 0 || Object.keys(ast).length > 0;
+}
+
+function clearGuestData(){
+  localStorage.removeItem('guest-ledger-v4');
+  localStorage.removeItem('guest-assets-v1');
+  localStorage.removeItem('guest-cats-v1');
+  localStorage.removeItem('guest-budgets-v1');
+  localStorage.removeItem('guest-mode');
 }
 
 // 수동 동기화: Firebase에 업로드 (버튼 클릭 시)
