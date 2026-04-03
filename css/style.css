@@ -225,7 +225,7 @@ nav{display:flex;border-bottom:1px solid var(--border);padding:0 24px;background
 
 /* Date separator */
 .date-separator{display:flex;align-items:center;gap:12px;padding:18px 0 8px}
-.date-sep-day{font-size:22px;font-weight:800;color:var(--text);line-height:1;min-width:28px}
+.date-sep-day{font-size:22px;font-weight:800;color:var(--text);line-height:1;min-width:28px;display:flex;align-items:center;gap:4px;flex-wrap:nowrap;white-space:nowrap}
 .date-sep-meta{display:flex;flex-direction:column;gap:1px}
 .date-sep-ym{font-size:11px;color:var(--text-muted);font-weight:500}
 .date-sep-dow{font-size:10px;color:var(--text-dim)}
