@@ -1036,6 +1036,39 @@ function deleteAsset(){
 }
 
 // ==================== ADD/EDIT TRANSACTION MODAL ====================
+function openTxDetailModal(id){
+  const tx=transactions.find(t=>t.id===id);
+  if(!tx) return;
+  // 모달을 수정 모드로 열기
+  openAddModal(id);
+  // 모달 하단 액션 버튼 영역에 복사/삭제 버튼 추가
+  setTimeout(()=>{
+    const actions=document.querySelector('#add-modal .form-actions');
+    if(!actions) return;
+    // 기존에 추가된 버튼 있으면 제거
+    actions.querySelectorAll('.tx-detail-btn').forEach(b=>b.remove());
+    if(tx.type!=='transfer'){
+      const copyBtn=document.createElement('button');
+      copyBtn.className='btn btn-ghost tx-detail-btn';
+      copyBtn.textContent='복사';
+      copyBtn.style.cssText='margin-right:auto';
+      copyBtn.onclick=()=>{closeAddModal();copyTransaction(id);};
+      actions.prepend(copyBtn);
+    }
+    const delBtn=document.createElement('button');
+    delBtn.className='btn btn-danger-soft tx-detail-btn';
+    delBtn.textContent='삭제';
+    if(tx.type==='transfer'){
+      delBtn.style.cssText='margin-right:auto';
+    }
+    delBtn.onclick=()=>{closeAddModal();deleteTransaction(id);};
+    // 복사 버튼 다음에 삭제 버튼 삽입
+    const copyBtnEl=actions.querySelector('.tx-detail-btn');
+    if(copyBtnEl) copyBtnEl.after(delBtn);
+    else actions.prepend(delBtn);
+  }, 80);
+}
+
 function openAddModal(editTxId=null){
   const isEdit=!!editTxId;
   document.getElementById('add-modal-title').textContent=isEdit?'거래 수정':'거래 추가';
@@ -1106,7 +1139,7 @@ function openAddModal(editTxId=null){
   document.getElementById('add-modal').classList.add('show');
 }
 
-function closeAddModal(){document.getElementById('add-modal').classList.remove('show');}
+function closeAddModal(){document.getElementById('add-modal').classList.remove('show');document.querySelectorAll('.tx-detail-btn').forEach(b=>b.remove());}
 
 function clearForm(){
   ['f-name','f-persons'].forEach(id=>document.getElementById(id).value='');
@@ -1761,7 +1794,7 @@ async function renderLedger(){
 
     const itemsHtml=g.items.map(t=>{
       if(t.type==='transfer'){
-        return `<div class="ledger-item" style="--item-color:var(--accent)">
+        return `<div class="ledger-item" onclick="openAddModal(${t.id})" style="--item-color:var(--accent);cursor:pointer">
           <div class="item-icon dutch">↔</div>
           <div class="item-body">
             <div class="item-top"><div class="item-name">${t.name}</div><div class="item-amount" style="color:var(--text)">${fmt(t.amount)}</div></div>
@@ -1772,16 +1805,13 @@ async function renderLedger(){
               <span class="tag tag-asset">${t.toAssetName}</span>
             </div>
           </div>
-          <div class="item-actions">
-            <button class="icon-btn edit" onclick="openAddModal(${t.id})" title="수정">✎</button>
-            <button class="icon-btn danger" onclick="deleteTransaction(${t.id})" title="삭제">✕</button>
           </div>
         </div>`;
       }
       if(t.type==='balance_adj'){
         const sign=t.diff>0?'+':'';
         const color=t.diff>0?'var(--green)':'var(--red)';
-        return `<div class="ledger-item" style="border-left:3px solid var(--text-dim)">
+        return `<div class="ledger-item" onclick="openTxDetailModal(${t.id})" style="border-left:3px solid var(--text-dim);cursor:pointer">
           <div class="item-icon" style="background:var(--surface2);font-size:17px">⚖️</div>
           <div class="item-body">
             <div class="item-top"><div class="item-name">${t.name}</div><div class="item-amount" style="color:${color}">${sign}${fmt(Math.abs(t.diff))}</div></div>
@@ -1790,9 +1820,6 @@ async function renderLedger(){
               <span class="tag tag-asset">${t.assetName}</span>
               <span style="font-size:10px;color:var(--text-dim)">${fmt(t.balanceBefore)} → ${fmt(t.balanceAfter)}</span>
             </div>
-          </div>
-          <div class="item-actions">
-            <button class="icon-btn danger" onclick="deleteTransaction(${t.id})" title="삭제">✕</button>
           </div>
         </div>`;
       }
@@ -1820,21 +1847,18 @@ async function renderLedger(){
         </div>
         ${(()=>{const sp=t.settlePersons||[{name:t.settleMemo||'',method:t.settleMethod||'카카오페이'}];if(!sp.length)return '';return '<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">'+sp.map((p,i)=>`<div style="display:flex;align-items:center;gap:8px;font-size:11px;padding:4px 8px;background:var(--surface2);border-radius:6px"><span style="color:var(--text-muted);flex-shrink:0">${i+1}.</span><span style="flex:1;font-weight:500">${p.name||`${i+1}번째 인원`}</span><span style="color:var(--accent)">${p.method}</span><span style="color:var(--text-muted)">${fmt(Math.round(t.otherShare/(t.persons||1)))}</span></div>`).join('')+'</div>';})()}
       </div>`:'';
-      return `<div class="ledger-item ${cls}">
+      return `<div class="ledger-item ${cls}" onclick="openTxDetailModal(${t.id})" style="cursor:pointer">
         <div class="item-icon ${cls}">${icon}</div>
         <div class="item-body">
           <div class="item-top"><div class="item-name">${t.name}</div><div class="item-amount ${amtCls}">${amtStr}</div></div>
           <div class="item-meta">
             ${t.time?`<span class="tag-date">${t.time}</span>`:''}
-            <span class="tag tag-cat" onclick="filterByCat('${t.cat}')" title="이 카테고리로 필터">${catLabel}</span>${assetTag}${settleTag}
+            <span class="tag tag-cat" onclick="event.stopPropagation();filterByCat('${t.cat}')" title="이 카테고리로 필터">${catLabel}</span>${assetTag}${settleTag}
           </div>
           ${dutchDetail}
         </div>
         <div class="item-actions">
-          ${settleBtn}
-          <button class="icon-btn edit" onclick="openAddModal(${t.id})" title="수정">✎</button>
-          <button class="icon-btn" onclick="copyTransaction(${t.id})" title="복사" style="font-size:13px">⎘</button>
-          <button class="icon-btn danger" onclick="deleteTransaction(${t.id})" title="삭제">✕</button>
+          ${settleBtn?`<span onclick="event.stopPropagation()">${settleBtn}</span>`:''}
         </div>
       </div>`;
     }).join('');
