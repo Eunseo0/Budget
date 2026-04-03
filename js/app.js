@@ -239,14 +239,7 @@ async function handleGuestLoginMerge(uid){
 
     let choice;
     if(accountExists){
-      choice = confirm(
-        '기존 계정 데이터가 있어요.
-
-' +
-        '확인 → 기존 계정 데이터 불러오기 (게스트 데이터 삭제)
-' +
-        '취소 → 게스트 데이터를 계정에 저장 (기존 계정 데이터 덮어쓰기)'
-      );
+      choice = confirm('기존 계정 데이터가 있어요.\n\n확인 → 기존 계정 데이터 불러오기 (게스트 데이터 삭제)\n취소 → 게스트 데이터를 계정에 저장 (기존 계정 데이터 덮어쓰기)');
     } else {
       // 신규 계정 → 게스트 데이터 자동 저장
       choice = false;
